@@ -1,5 +1,7 @@
 #sudo docker run --gpus all --tty --interactive --network=host --env DISPLAY=:0 --volume="$XAUTH:/root/.Xauthority" -ti deepwaredev/deep-image
 
+sudo xhost +local:docker
+
 docker run -it \
     --gpus all \
     --network=host \
