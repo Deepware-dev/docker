@@ -1,6 +1,12 @@
-# This is an auto generated Dockerfile for ros:ros-core
-# generated from docker_images/create_ros_core_image.Dockerfile.em
-FROM nvidia/cuda
+# Name: deep-image
+# Description: 
+#
+# VERSION       1.0
+#
+
+FROM ubuntu:18.04 AS base
+
+FROM nvidia/cuda:10.2-devel AS nvidia
 
 # RUN executes a shell command
 # You can chain multiple commands together with && 
@@ -11,54 +17,29 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         cuda-samples-$CUDA_PKG_VERSION && \
     rm -rf /var/lib/apt/lists/*
 
-# install packages
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    dirmngr \
-    gnupg2 \
-    curl \
-    lsb-release \
-    && rm -rf /var/lib/apt/lists/*
-
-
-# Setup sources.list
-RUN sh -c 'echo "deb http://packages.ros.org/ros/ubuntu $(lsb_release -sc) main" > /etc/apt/sources.list.d/ros-latest.list'
-
-# setup keys
-RUN apt-key adv --keyserver 'hkp://keyserver.ubuntu.com:80' --recv-key C1CF6E31E6BADE8868B172B4F42ED6FBAB17C654
+FROM ros:melodic-ros-core AS ros
 
 # no interaction for tzdata
-ARG DEBIAN_FRONTEND=noninteractive
+ENV DEBIAN_FRONTEND=noninteractive
 
-# install bootstrap tools
-RUN apt-get update && apt-get install --no-install-recommends -y \
-    python-rosdep \
-    python-rosinstall \
-    python-vcstools \
-    && rm -rf /var/lib/apt/lists/*
+# Updating Ubuntu packages
+RUN apt-get update && yes | apt-get upgrade
 
-# setup environment
-ENV LANG C.UTF-8
-ENV LC_ALL C.UTF-8
-
-# bootstrap rosdep
-RUN rosdep init \
-    && rosdep update
-
-# install ros packages
-ENV ROS_DISTRO melodic
-RUN apt-get update && apt-get install -y \
-    ros-melodic-desktop-full \
-    && rm -rf /var/lib/apt/lists/*
-
-# setup entrypoint
-#COPY ./ros_entrypoint.sh /
-
-#ENTRYPOINT ["/ros_entrypoint.sh"]
-#CMD ["bash"]
-
-RUN apt-get install python-rosinstall \
-			python-wstool build-essential \
-			&& rm -rf /var/lib/apt/lists/*
+# Adding utils
+RUN apt-get update && \
+    apt-get install -y  --no-install-recommends \
+                        wget \
+                        bzip2 \
+                        terminator \
+                        sudo \
+                        x11-apps \
+                        dbus-x11 \
+                        dirmngr \
+                        gnupg2 \
+                        curl \
+                        lsb-release \
+                        && apt-get clean \
+                        && rm -rf /var/lib/apt/lists/*
 
 # --------- Python
 
@@ -75,18 +56,21 @@ RUN pip3 install med2image
 # First: get all the dependencies:
 #
 RUN apt-get update
-RUN apt-get install -y cmake git libgtk2.0-dev pkg-config libavcodec-dev \
-libavformat-dev libswscale-dev python-dev python-numpy libtbb2 libtbb-dev \
-libjpeg-dev libpng-dev libtiff-dev libdc1394-22-dev unzip \
-glew-utils libglew-dev \
-libboost-all-dev \
-libeigen3-dev \
-wget
-
-
+RUN apt-get install -y  cmake git libgtk2.0-dev pkg-config libavcodec-dev \
+                        libavformat-dev libswscale-dev python-dev python-numpy libtbb2 libtbb-dev \
+                        libjpeg-dev libpng-dev libtiff-dev libdc1394-22-dev unzip \
+                        glew-utils libglew-dev \
+                        libboost-all-dev \
+                        libeigen3-dev \
+                        wget \
+                        libxt-dev \
+                        && apt-get clean \
+                        && rm -rf /var/lib/apt/lists/* 
+    
 # ---------- VTK
 ENV VTK_VERSION="8.2.0"
 ENV VTK_VER="8.2"
+WORKDIR /
 
 RUN wget -nv -O- http://www.vtk.org/files/release/${VTK_VER}/VTK-${VTK_VERSION}.tar.gz | \
     tar xz && \
@@ -103,18 +87,17 @@ RUN wget -nv -O- http://www.vtk.org/files/release/${VTK_VER}/VTK-${VTK_VERSION}.
     -DVTK_USE_SYSTEM_LIBHARU=OFF \
     -DVTK_USE_SYSTEM_PUGIXML=OFF \
     -DCMAKE_BUILD_TYPE=Release \
-    .. && \
-    make -j $NJOBS && \
-    make install && \
-    cd .. && rm -rf ${VTK_VERSION}
+    .. \
+    ##
+    ## Add variable to enable make to use all cores
+    && export NUMPROC=$(nproc --all) \
+    && make -j$NUMPROC install \
+    && cd .. && rm -rf ${VTK_VERSION} && rm -rf VTK-${VTK_VERSION}.tar.gz
 
 # ----------OpenCV
 ENV OPENCV_VERSION="4.1.2"
 
 RUN pip3 install numpy
-
-# Just get a simple editor for convienience (you could just cancel this line)
-RUN apt-get install -y vim
 
 WORKDIR /
 ENV OPENCV_VERSION="4.1.2"
@@ -150,7 +133,7 @@ RUN	cd /opencv-$OPENCV_VERSION && \
        -DBUILD_opencv_dnn=ON \
        -DWITH_CUBLAS=1 \
        -DCUDA_TOOLKIT_ROOT_DIR=/usr/local/cuda \
-       -DCUDA_ARCH_BIN='3.0 3.5 5.0 6.0 6.2' \
+       -DCUDA_ARCH_BIN='3.0 3.5 5.0 6.0 6.2 7.2 7.5' \
        -DCUDA_ARCH_PTX="" \
        -DCPU_DISPATCH=AVX,AVX2 \
        -DENABLE_PRECOMPILED_HEADERS=OFF \
@@ -170,32 +153,64 @@ RUN	cd /opencv-$OPENCV_VERSION && \
        -DBUILD_TESTS=OFF \
        -DBUILD_PERF_TESTS=OFF \
        -DCMAKE_BUILD_TYPE=RELEASE \
-       -DBUILD_EXAMPLES=ON \
+       -DBUILD_EXAMPLES=OFF \
     	.. \
     ##
     ## Add variable to enable make to use all cores
     && export NUMPROC=$(nproc --all) \
-    && make -j$NUMPROC install
+    && make -j$NUMPROC install \
+    && rm -r /opencv-$OPENCV_VERSION \
+    && rm -r /opencv_contrib-$OPENCV_VERSION
 
-#RUN rm -r /opencv-$OPENCV_VERSION && \
-#    rm -r /opencv_contrib-$OPENCV_VERSION
-
-RUN 	cd / && \
-	wget https://github.com/opencv/opencv_extra/archive/$OPENCV_VERSION.zip && \
-	unzip $OPENCV_VERSION.zip
-	##cd opencv_extra && git checkout $OPENCV_VERSION 
-
-ENV OPENCV_TEST_DATA_PATH="/opencv_extra/"
+#RUN 	cd / && \
+#	wget https://github.com/opencv/opencv_extra/archive/$OPENCV_VERSION.zip && \
+#	unzip $OPENCV_VERSION.zip \
+#   cd opencv_extra && git checkout $OPENCV_VERSION 
+#ENV OPENCV_TEST_DATA_PATH="/opencv_extra/"
 
 ## -------------PANGOLIN
-
 
 RUN 	cd / && \
 	git clone https://github.com/stevenlovegrove/Pangolin.git && \
 	cd Pangolin && git checkout v0.5 && \
 	mkdir build && cd build && cmake  .. \
-	&& make -j4 && make install
+	&& export NUMPROC=$(nproc --all) \
+    && make -j$NUMPROC install \
+    && cd / && rm -rf Pangolin
 
-RUN apt-get install -qqy x11-apps libcanberra-gtk-module libcanberra-gtk3-module
+# ----------- ROS Utils
+# make sure the package repository is up to date
+RUN apt-get -y update
+RUN apt-get install -y debian-keyring debian-archive-keyring
 
+# install ROS key
+RUN apt-get install -y wget
+RUN wget --no-check-certificate https://raw.githubusercontent.com/ros/rosdistro/master/ros.key -O - | apt-key add -
 
+# for TESTS of exposing port
+RUN apt-get install -y netcat
+
+# update ros repository
+#RUN sh -c 'echo "deb http://packages.ros.org/ros/ubuntu $(lsb_release -sc) main" > /etc/apt/sources.list.d/ros-latest.list'
+#RUN sh -c 'echo "deb http://ppa.launchpad.net/chris-lea/node.js/ubuntu $(lsb_release -sc) main" > /etc/apt/sources.list.d/node-latest.list'
+#RUN apt-key adv --keyserver keyserver.ubuntu.com --recv-keys B9316A7BC7917B12
+RUN apt-get update
+
+RUN apt-get install -y  ros-$(rosversion -d)-visualization-msgs \
+                        ros-$(rosversion -d)-turtlesim \
+                        ros-melodic-rviz-visual-tools
+
+# nvidia-container-runtime
+ENV NVIDIA_VISIBLE_DEVICES \
+    ${NVIDIA_VISIBLE_DEVICES:-all}
+ENV NVIDIA_DRIVER_CAPABILITIES \
+    ${NVIDIA_DRIVER_CAPABILITIES:+$NVIDIA_DRIVER_CAPABILITIES,}graphics
+
+# Add user deepware with no password, add to sudo group
+RUN adduser --disabled-password --gecos '' deepware
+RUN adduser deepware sudo
+RUN echo '%sudo ALL=(ALL) NOPASSWD:ALL' >> /etc/sudoers
+USER deepware
+WORKDIR /home/deepware/
+RUN chmod a+rwx /home/deepware/
+#RUN echo `pwd`
