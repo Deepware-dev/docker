@@ -200,6 +200,9 @@ RUN apt-get install -y  ros-$(rosversion -d)-visualization-msgs \
                         ros-$(rosversion -d)-turtlesim \
                         ros-melodic-rviz-visual-tools
 
+RUN apt-get install -y  libcanberra-gtk-module libcanberra-gtk3-module \
+                        gir1.2-keybinder-3.0 libkeybinder-3.0-0
+
 # nvidia-container-runtime
 ENV NVIDIA_VISIBLE_DEVICES \
     ${NVIDIA_VISIBLE_DEVICES:-all}
