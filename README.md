@@ -15,3 +15,9 @@ and than, in the docker, run:
 <pre><code>terminator </code></pre>
 
 now, you can run, roscore, rviz ecc...
+
+if you want to mount your home folder, start the docker with the following option:
+
+<pre><code>/run.sh -v /home/$USER:/home/deepware deepwaredev/deep-image </code></pre>
+
+now you can find your home folder on home deepware.
